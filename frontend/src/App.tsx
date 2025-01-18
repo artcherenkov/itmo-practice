@@ -1,5 +1,5 @@
 import Dagre from "@dagrejs/dagre";
-import React, { useCallback } from "react";
+import { useCallback, useEffect } from "react";
 import {
   ReactFlow,
   ReactFlowProvider,
@@ -7,6 +7,8 @@ import {
   useNodesState,
   useEdgesState,
   useReactFlow,
+  Edge,
+  Node,
 } from "@xyflow/react";
 
 import "@xyflow/react/dist/style.css";
@@ -15,6 +17,8 @@ import {
   QueryClientProvider,
   useQuery,
 } from "@tanstack/react-query";
+
+type TNodesLayoutDirection = "TB" | "LR";
 
 // Инициализация QueryClient
 const queryClient = new QueryClient();
@@ -26,7 +30,7 @@ const useFetchPrettyData = () => {
     queryFn: async () => {
       const response = await fetch("http://localhost:3000/api/terms/pretty");
       if (!response.ok) {
-        throw new Error("Ошибка при получении данных с API");
+        throw new Error("Ошибка при получении данных из API");
       }
       return response.json();
     },
@@ -34,7 +38,11 @@ const useFetchPrettyData = () => {
   });
 };
 
-const getLayoutedElements = (nodes, edges, options) => {
+const getLayoutedElements = (
+  nodes: Node[],
+  edges: Edge[],
+  options: { direction: TNodesLayoutDirection },
+): { nodes: Node[]; edges: Edge[] } => {
   const g = new Dagre.graphlib.Graph().setDefaultEdgeLabel(() => ({}));
   g.setGraph({ rankdir: options.direction });
 
@@ -65,29 +73,22 @@ const getLayoutedElements = (nodes, edges, options) => {
 
 const LayoutFlow = () => {
   const { fitView } = useReactFlow();
+
   const { data, isLoading, isError } = useFetchPrettyData();
 
-  const [nodes, setNodes, onNodesChange] = useNodesState([]);
-  const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+  const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
 
-  // Обновляем состояние узлов и связей при загрузке данных
-  React.useEffect(() => {
+  useEffect(() => {
     if (data) {
-      const { nodes, edges } = getLayoutedElements(
-        data.initialNodes,
-        data.initialEdges,
-        {
-          direction: "TB",
-        },
-      );
-      setNodes(nodes);
-      setEdges(edges);
+      const { initialNodes, initialEdges } = data;
+      setNodes(initialNodes);
+      setEdges(initialEdges);
     }
   }, [data]);
 
   const onLayout = useCallback(
-    (direction) => {
-      console.log(nodes);
+    (direction: TNodesLayoutDirection) => {
       const layouted = getLayoutedElements(nodes, edges, { direction });
 
       setNodes([...layouted.nodes]);
@@ -97,8 +98,11 @@ const LayoutFlow = () => {
         fitView();
       });
     },
-    [nodes, edges],
+    [nodes, edges, fitView],
   );
+
+  if (isLoading) return <div>Загрузка данных...</div>;
+  if (isError) return <div>Ошибка при загрузке данных</div>;
 
   return (
     <ReactFlow
