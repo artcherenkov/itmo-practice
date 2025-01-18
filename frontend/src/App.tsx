@@ -10,36 +10,29 @@ import {
 } from "@xyflow/react";
 
 import "@xyflow/react/dist/style.css";
-import { data } from "./data.ts";
+import {
+  QueryClient,
+  QueryClientProvider,
+  useQuery,
+} from "@tanstack/react-query";
 
-export const mapDataToNodesAndEdges = (data) => {
-  const initialNodes = [];
-  const initialEdges = [];
+// Инициализация QueryClient
+const queryClient = new QueryClient();
 
-  // Create nodes
-  data.forEach((item, index) => {
-    initialNodes.push({
-      id: item._id,
-      data: { label: item.term },
-      position: { x: Math.random() * 800, y: Math.random() * 600 }, // Random positions for visualization
-    });
-
-    // Create edges for relations
-    item.relations.forEach((relation) => {
-      initialEdges.push({
-        id: `e${item._id}-${relation.target._id}`,
-        source: item._id,
-        target: relation.target._id,
-        animated: true,
-        label: relation.relationType,
-      });
-    });
+// Получение данных с API
+const useFetchPrettyData = () => {
+  return useQuery({
+    queryKey: ["prettyData"], // Ключ для кэширования
+    queryFn: async () => {
+      const response = await fetch("http://localhost:3000/api/terms/pretty");
+      if (!response.ok) {
+        throw new Error("Ошибка при получении данных с API");
+      }
+      return response.json();
+    },
+    refetchOnWindowFocus: false,
   });
-
-  return { initialNodes, initialEdges };
 };
-
-const { initialNodes, initialEdges } = mapDataToNodesAndEdges(data);
 
 const getLayoutedElements = (nodes, edges, options) => {
   const g = new Dagre.graphlib.Graph().setDefaultEdgeLabel(() => ({}));
@@ -72,8 +65,25 @@ const getLayoutedElements = (nodes, edges, options) => {
 
 const LayoutFlow = () => {
   const { fitView } = useReactFlow();
-  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
-  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
+  const { data, isLoading, isError } = useFetchPrettyData();
+
+  const [nodes, setNodes, onNodesChange] = useNodesState([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+
+  // Обновляем состояние узлов и связей при загрузке данных
+  React.useEffect(() => {
+    if (data) {
+      const { nodes, edges } = getLayoutedElements(
+        data.initialNodes,
+        data.initialEdges,
+        {
+          direction: "TB",
+        },
+      );
+      setNodes(nodes);
+      setEdges(edges);
+    }
+  }, [data]);
 
   const onLayout = useCallback(
     (direction) => {
@@ -107,10 +117,12 @@ const LayoutFlow = () => {
 
 export default function App() {
   return (
-    <div style={{ width: "100vw", height: "100vh" }}>
-      <ReactFlowProvider>
-        <LayoutFlow />
-      </ReactFlowProvider>
-    </div>
+    <QueryClientProvider client={queryClient}>
+      <div style={{ width: "100vw", height: "100vh" }}>
+        <ReactFlowProvider>
+          <LayoutFlow />
+        </ReactFlowProvider>
+      </div>
+    </QueryClientProvider>
   );
 }
