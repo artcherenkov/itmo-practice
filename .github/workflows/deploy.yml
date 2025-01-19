@@ -1,0 +1,91 @@
+name: Deploy Node.js App
+
+on:
+  push:
+    branches:
+      - master
+
+env:
+  SERVER_USER: acherenkov                                     # Пользователь на сервере
+  SERVER_IP: 130.193.45.25                                    # IP-адрес сервера
+  PROJECT_DIR: /home/acherenkov/workspace/itmo-practice       # Директория проекта на сервере
+  FRONTEND_DIR: /var/www/itmo-practice-frontend               # Путь для фронтенда на сервере
+  NGINX_CONFIG_DIR: /etc/nginx/sites-available                # Директория конфигурации Nginx
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Шаг 1: Клонирование репозитория
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Шаг 2: Кэширование зависимостей фронтенда
+      - name: Cache frontend dependencies
+        uses: actions/cache@v3
+        with:
+          path: frontend/node_modules
+          key: ${{ runner.os }}-node-${{ hashFiles('frontend/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+
+      # Шаг 3: Сборка фронтенда
+      - name: Build frontend
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+      - run: |
+          cd frontend
+          VITE_API_BASE_URL=http://itmo-practice.acherenkov.tech
+          npm install
+          npm run build
+
+      # Шаг 4: Запуск SSH агента
+      - name: Setup SSH agent
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Test SSH connection
+        run: ssh -o StrictHostKeyChecking=no ${{ env.SERVER_USER }}@${{ env.SERVER_IP }} "echo 'SSH connection successful'"
+
+      # Шаг 5: Копирование фронтенда на сервер
+      - name: Deploy frontend
+        run: |
+          ssh ${{ env.SERVER_USER }}@${{ env.SERVER_IP }} "mkdir -p ${{ env.FRONTEND_DIR }}"
+          scp -rC frontend/dist/* ${{ env.SERVER_USER }}@${{ env.SERVER_IP }}:${{ env.FRONTEND_DIR }}
+
+      # Шаг 6: Копирование и активация конфигурации Nginx
+      - name: Deploy Nginx configuration
+        run: |
+          scp nginx/itmo-practice.conf ${{ env.SERVER_USER }}@${{ env.SERVER_IP }}:/tmp/itmo-practice.conf
+          ssh ${{ env.SERVER_USER }}@${{ env.SERVER_IP }} << 'EOF'
+            sudo mv /tmp/itmo-practice.conf ${{ env.NGINX_CONFIG_DIR }}/itmo-practice.conf
+            sudo ln -sf ${{ env.NGINX_CONFIG_DIR }}/itmo-practice.conf /etc/nginx/sites-enabled/itmo-practice.conf
+            sudo nginx -t && sudo systemctl restart nginx
+          EOF
+
+      - name: Pull latest changes on server
+        run: |
+          ssh ${{ env.SERVER_USER }}@${{ env.SERVER_IP }} << 'EOF'
+            cd ${{ env.PROJECT_DIR }}
+            git pull origin master
+          EOF
+
+      # Шаг 7: Перезапуск контейнеров с помощью Docker Compose
+      - name: Deploy backend with Docker Compose
+        run: |
+          ssh ${{ env.SERVER_USER }}@${{ env.SERVER_IP }} << 'EOF'
+            cd ${{ env.PROJECT_DIR }}
+            docker compose down
+            docker compose up -d --build
+          EOF
+
+      # Шаг 8: Проверка статуса сервисов
+      - name: Check services status
+        run: |
+          ssh ${{ env.SERVER_USER }}@${{ env.SERVER_IP }} << 'EOF'
+            docker ps
+            sudo systemctl status nginx
+          EOF

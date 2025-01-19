@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { API_BASE_URL } from "../const/apiBaseUrl.ts";
 
 type TGlossaryTerm = {
   id: string;
@@ -10,7 +11,7 @@ export default function useFetchGlossaryTerms() {
   return useQuery<TGlossaryTerm[]>({
     queryKey: ["glossaryTerms"],
     queryFn: async () => {
-      const response = await fetch("http://localhost:3000/api/terms/glossary");
+      const response = await fetch(`${API_BASE_URL}/api/terms/glossary`);
       if (!response.ok) {
         throw new Error("Ошибка при получении данных из API");
       }
