@@ -37,9 +37,8 @@ jobs:
           node-version: 18
       - run: |
           cd frontend
-          VITE_API_BASE_URL=http://itmo-practice.acherenkov.tech
           npm install
-          npm run build
+          VITE_API_BASE_URL=https://itmo-practice.acherenkov.tech npm run build
 
       # Шаг 4: Запуск SSH агента
       - name: Setup SSH agent
