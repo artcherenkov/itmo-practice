@@ -372,12 +372,12 @@ app.get("/api/terms/pretty", async (req, res) => {
 
         // Функция для преобразования данных
         const mapDataToNodesAndEdges = (data) => {
-            const initialNodes = [];
-            const initialEdges = [];
+            const nodes = [];
+            const edges = [];
 
             // Создаем узлы
             data.forEach((item) => {
-                initialNodes.push({
+                nodes.push({
                     id: item._id,
                     data: { label: item.term },
                     position: { x: Math.random() * 800, y: Math.random() * 600 }, // Случайные позиции
@@ -385,7 +385,7 @@ app.get("/api/terms/pretty", async (req, res) => {
 
                 // Создаем связи
                 item.relations.forEach((relation) => {
-                    initialEdges.push({
+                    edges.push({
                         id: `e${item._id}-${relation.target._id}`,
                         source: item._id,
                         target: relation.target._id,
@@ -395,7 +395,7 @@ app.get("/api/terms/pretty", async (req, res) => {
                 });
             });
 
-            return { initialNodes, initialEdges };
+            return { nodes, edges };
         };
 
         // Преобразуем данные
@@ -405,6 +405,26 @@ app.get("/api/terms/pretty", async (req, res) => {
     } catch (error) {
         console.error("Ошибка при форматировании данных:", error.message);
         res.status(500).json({ message: "Ошибка при форматировании данных", error: error.message });
+    }
+});
+
+// Роут для получения данных в формате: id, title, description
+app.get("/api/terms/glossary", async (req, res) => {
+    try {
+        // Получаем все термины из базы данных
+        const terms = await Glossary.find({}, "_id term definition");
+
+        // Преобразуем термины в нужный формат
+        const formattedTerms = terms.map((term) => ({
+            id: term._id,
+            title: term.term,
+            description: term.definition,
+        }));
+
+        res.status(200).json(formattedTerms);
+    } catch (error) {
+        console.error("Ошибка при получении терминов:", error.message);
+        res.status(500).json({ message: "Ошибка при получении данных", error: error.message });
     }
 });
 

@@ -22,7 +22,7 @@ export default function GraphContainer() {
 
   useEffect(() => {
     if (data) {
-      const { initialNodes, initialEdges } = data;
+      const { nodes: initialNodes, edges: initialEdges } = data;
       setNodes(initialNodes);
       setEdges(initialEdges);
     }
