@@ -88,6 +88,7 @@ jobs:
         run: |
           ssh ${{ env.SERVER_USER }}@${{ env.SERVER_IP }} << 'EOF'
             cd ${{ env.PROJECT_DIR }}
+            docker pull ${{ env.DOCKER_IMAGE }}
             docker compose down
             docker compose up -d
           EOF
