@@ -11,6 +11,7 @@ env:
   PROJECT_DIR: /home/acherenkov/workspace/itmo-practice       # Директория проекта на сервере
   FRONTEND_DIR: /var/www/itmo-practice-frontend               # Путь для фронтенда на сервере
   NGINX_CONFIG_DIR: /etc/nginx/sites-available                # Директория конфигурации Nginx
+  DOCKER_IMAGE: artcherenkov/itmo-practice-backend            # Имя Docker-образа для бэкенда
 
 jobs:
   deploy:
@@ -34,13 +35,25 @@ jobs:
       - name: Build frontend
         uses: actions/setup-node@v4
         with:
-          node-version: 18
+          node-version: 20
       - run: |
           cd frontend
           npm install
           VITE_API_BASE_URL=https://itmo-practice.acherenkov.tech npm run build
 
-      # Шаг 4: Запуск SSH агента
+      # Шаг 4: Сборка и пуш Docker-образа
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build and push Docker image
+        run: |
+          docker build -t ${{ env.DOCKER_IMAGE }} ./backend
+          docker push ${{ env.DOCKER_IMAGE }}
+
+      # Шаг 5: Запуск SSH агента
       - name: Setup SSH agent
         uses: webfactory/ssh-agent@v0.9.0
         with:
@@ -49,13 +62,13 @@ jobs:
       - name: Test SSH connection
         run: ssh -o StrictHostKeyChecking=no ${{ env.SERVER_USER }}@${{ env.SERVER_IP }} "echo 'SSH connection successful'"
 
-      # Шаг 5: Копирование фронтенда на сервер
+      # Шаг 6: Копирование фронтенда на сервер
       - name: Deploy frontend
         run: |
           ssh ${{ env.SERVER_USER }}@${{ env.SERVER_IP }} "mkdir -p ${{ env.FRONTEND_DIR }}"
           scp -rC frontend/dist/* ${{ env.SERVER_USER }}@${{ env.SERVER_IP }}:${{ env.FRONTEND_DIR }}
 
-      # Шаг 6: Копирование и активация конфигурации Nginx
+      # Шаг 7: Копирование и активация конфигурации Nginx
       - name: Deploy Nginx configuration
         run: |
           scp nginx/itmo-practice.conf ${{ env.SERVER_USER }}@${{ env.SERVER_IP }}:/tmp/itmo-practice.conf
@@ -65,23 +78,21 @@ jobs:
             sudo nginx -t && sudo systemctl restart nginx
           EOF
 
-      - name: Pull latest changes on server
+      # Шаг 8: Копирование docker-compose.yml на сервер
+      - name: Copy docker-compose.yml
         run: |
-          ssh ${{ env.SERVER_USER }}@${{ env.SERVER_IP }} << 'EOF'
-            cd ${{ env.PROJECT_DIR }}
-            git pull origin master
-          EOF
+          scp docker-compose.yml ${{ env.SERVER_USER }}@${{ env.SERVER_IP }}:${{ env.PROJECT_DIR }}/docker-compose.yml
 
-      # Шаг 7: Перезапуск контейнеров с помощью Docker Compose
+      # Шаг 9: Перезапуск контейнеров с новым образом
       - name: Deploy backend with Docker Compose
         run: |
           ssh ${{ env.SERVER_USER }}@${{ env.SERVER_IP }} << 'EOF'
             cd ${{ env.PROJECT_DIR }}
             docker compose down
-            docker compose up -d --build
+            docker compose up -d
           EOF
 
-      # Шаг 8: Проверка статуса сервисов
+      # Шаг 10: Проверка статуса сервисов
       - name: Check services status
         run: |
           ssh ${{ env.SERVER_USER }}@${{ env.SERVER_IP }} << 'EOF'
