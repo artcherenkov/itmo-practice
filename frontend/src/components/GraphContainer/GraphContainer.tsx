@@ -1,4 +1,5 @@
 import {
+  Controls,
   Edge,
   Node,
   Panel,
@@ -58,6 +59,7 @@ export default function GraphContainer() {
           Расставить
         </button>
       </Panel>
+      <Controls />
     </ReactFlow>
   );
 }
